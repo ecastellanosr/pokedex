@@ -1,5 +1,5 @@
 package main
 
 func main() {
-	startRepl()
+	startRepl() //Run CLI
 }
