@@ -27,6 +27,11 @@ func getCommands() map[string]cliCommand {
 			description: "Exit the Pokedex",
 			callback:    commandExit,
 		},
+		"region": {
+			name:        "region",
+			description: "Map location in a region, needs the name as an argument",
+			callback:    commandRegion,
+		},
 		"map": {
 			name:        "map",
 			description: "Map the next 20 Pokemon locations",
@@ -57,6 +62,11 @@ func getCommands() map[string]cliCommand {
 			description: "List your pokemon in your pokedex",
 			callback:    commandPokedex,
 		},
+		"start": {
+			name:        "start",
+			description: "Pick a starter pokemon",
+			callback:    commandStart,
+		},
 	}
 }
 
@@ -76,8 +86,78 @@ func commandHelp(cfg *config) error {
 	return nil
 }
 
-// Map next area
+func commandStart(cfg *config) error { //catch pokemon after going to an area
+	if cfg.hasStarter {
+		fmt.Println("You already have a starter!")
+		return nil
+	}
+	pokemonURL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%v/", cfg.arg)
+	for _, pokemonName := range cfg.starters {
+		if pokemonName == cfg.arg {
+			cfg.hasStarter = true
+			pokemon, err := pokeapi.GetPokemon(pokemonURL)
+			if err != nil {
+				return fmt.Errorf("Error while getting pokemon: %v", err)
+			}
+			err = pokedexUpdate(cfg, pokemon)
+			if err != nil {
+				return fmt.Errorf("Error while updating pokedex: %v", err)
+			}
+			fmt.Printf("%v has been selected\n", pokemon.Name)
+			fmt.Println()
+			return nil
+		} else {
+			continue
+		}
+	}
+	fmt.Printf("%v is not a starter, please select a starter from\n%v\n", cfg.arg, cfg.starters)
+	cfg.arg = ""
+	return nil
+}
+
+// Map Region location or list all regions
+func commandRegion(cfg *config) error {
+	if cfg.arg == "" {
+		regions, err := pokeapi.GetRegions()
+		if err != nil {
+			return err
+		}
+		if err = regions.List(); err != nil { //list pokemons in area
+			return fmt.Errorf("Error while Listing Regions: %v", err)
+		}
+		return nil
+	}
+	region := fmt.Sprintf("https://pokeapi.co/api/v2/region/%v/", cfg.arg) //place URL
+	ok, err := cacheShowList(cfg, cfg.arg, "region")                       //Check cache
+	if err != nil {
+		return fmt.Errorf("Error while cacheShowList: %v", err)
+	}
+	if ok {
+		return nil
+	}
+	pokeRegion, err := pokeapi.GetRegion(region) //Get pokemons in the area
+	if err != nil {
+		return fmt.Errorf("Error while GetPokeMap: %v", err)
+	}
+	if err = cfgUpdate(cfg, pokeRegion, cfg.arg); err != nil { //update cfg for cache
+		return fmt.Errorf("Error while cfgUpdate: %v", err)
+	}
+
+	if err = pokeRegion.List(); err != nil { //list pokemons in area
+		return fmt.Errorf("Error while Listing Locations in a region: %v", err)
+	}
+	return nil
+}
+
+// Map Areas in a location
 func commandMap(cfg *config) error {
+	if cfg.arg != "" {
+		err := commandArgMap(cfg)
+		if err != nil {
+			return fmt.Errorf("error in commandArgMap: %v", err)
+		}
+		return nil
+	}
 	url := cfg.next
 	ok, err := cacheShowList(cfg, url, "map") //Check if area is in the cache for easy access
 	if err != nil {
@@ -95,6 +175,28 @@ func commandMap(cfg *config) error {
 	}
 	if err = pokeMap.List(); err != nil { //List the map areas
 		return err
+	}
+	return nil
+}
+
+func commandArgMap(cfg *config) error {
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/location/%v/", cfg.arg)
+	ok, err := cacheShowList(cfg, url, "argmap") //Check if area is in the cache for easy access
+	if err != nil {
+		return fmt.Errorf("error in cacheshowlist: %v", err)
+	}
+	if ok {
+		return nil
+	}
+	pokeLocation, err := pokeapi.GetLocation(url) // Get the map
+	if err != nil {
+		return fmt.Errorf("pokelocation: %v", err)
+	}
+	if err = cfgUpdate(cfg, pokeLocation, url); err != nil { //update configuration for next and prev map
+		return fmt.Errorf("cfgUpdate: %v", err)
+	}
+	if err = pokeLocation.List(); err != nil { //List the map areas
+		return fmt.Errorf("list error: %v", err)
 	}
 	return nil
 }

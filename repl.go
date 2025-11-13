@@ -28,9 +28,18 @@ func startRepl() {
 		previous: "",
 		cache:    pokecache.NewCache(interval),
 		pokedex:  map[string]pokeapi.Pokemon{},
+		starters: [3]string{
+			"bulbasaur",
+			"squirtle",
+			"charmander",
+		},
+		hasStarter:    false,
+		currentRegion: "kanto",
+		team:          []pokeapi.Pokemon{},
 	} //configuration with map, cache and pokedex
-
-	for { // main loop
+	fmt.Println("Choose one pokemon between these starter pokemon")
+	fmt.Println(cfg.starters)
+	for {
 		fmt.Print("Pokedex >")
 		if !scanner.Scan() {
 			continue
@@ -43,18 +52,42 @@ func startRepl() {
 		firstLine := input[0]     //command
 		if len(input) == 2 {
 			cfg.arg = input[1]
-
-		}
-		command, exists := getCommands()[firstLine]
-		if exists {
-			err := command.callback(&cfg) //execute command
-			if err != nil {
-				fmt.Println(err)
-			}
-			continue
 		} else {
-			fmt.Println("Unknown command")
+			cfg.arg = ""
+		}
+		if !cfg.hasStarter {
+			introductionLoop(&cfg, firstLine)
 			continue
 		}
+		actionLoop(&cfg, firstLine)
 	}
+}
+
+func introductionLoop(cfg *config, commandName string) {
+	//get a function here for the name and starter
+	if commandName == "start" {
+		actionLoop(cfg, commandName)
+		fmt.Printf("You are right now in the \"%v\" Region, explore it with \"region kanto\"!\n", cfg.currentRegion)
+		return
+	} else {
+		fmt.Println("First, choose one pokemon between these starter pokemon")
+		fmt.Println(cfg.starters)
+		return
+	}
+}
+
+func actionLoop(cfg *config, commandName string) {
+	//get a function here for the name and starter
+	command, exists := getCommands()[commandName]
+	if exists {
+		err := command.callback(cfg) //execute command
+		if err != nil {
+			fmt.Println(err)
+		}
+		return
+	} else {
+		fmt.Println("Unknown command")
+		return
+	}
+
 }

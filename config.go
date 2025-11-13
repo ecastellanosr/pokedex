@@ -11,11 +11,15 @@ import (
 
 // config has the next and previous maps, cache, current extra arg for commands and pokedex
 type config struct {
-	next     string
-	previous string
-	cache    *pokecache.Cache
-	arg      string
-	pokedex  map[string]pokeapi.Pokemon
+	hasStarter    bool
+	next          string
+	previous      string
+	currentRegion string
+	arg           string
+	starters      [3]string
+	cache         *pokecache.Cache
+	pokedex       map[string]pokeapi.Pokemon
+	team          []pokeapi.Pokemon
 }
 
 func cacheShowList(cfg *config, url string, cacheType string) (bool, error) {
@@ -63,6 +67,13 @@ func decodeAndList(cacheVal []byte, cacheType string) error { //decode cache and
 			return err
 		}
 		list = pokeArea
+	} else if cacheType == "argmap" {
+		var pokeLocation pokeapi.PokeArea
+		err := dec.Decode(&pokeLocation) // decode into area
+		if err != nil {
+			return err
+		}
+		list = pokeLocation
 	}
 	err := list.List() // list it
 	if err != nil {
@@ -91,5 +102,8 @@ func cfgUpdate(cfg *config, pokeStruct pokeapi.List, url string) error { //updat
 
 func pokedexUpdate(cfg *config, pokemon pokeapi.Pokemon) error { // add pokemon to pokedex
 	cfg.pokedex[pokemon.Name] = pokemon
+	if len(cfg.team) != 6 {
+		cfg.team = append(cfg.team, pokemon)
+	}
 	return nil
 }

@@ -12,11 +12,24 @@ type List interface {
 	List() error
 }
 
+type PokeRegion struct { //Location in map
+	ID        int                `json:"id"`
+	Name      string             `json:"name"`
+	Locations []NamedAPIResource `json:"locations"`
+}
+
 type PokeMapInfo struct { //Map struct
 	Count    int                `json:"count"`
 	Next     string             `json:"next"`
 	Previous string             `json:"previous"`
 	Results  []NamedAPIResource `json:"results"`
+}
+
+type PokeLocation struct {
+	ID     int                `json:"id"`
+	Name   string             `json:"name"`
+	Region NamedAPIResource   `json:"region"`
+	Areas  []NamedAPIResource `json:"areas"`
 }
 
 type NamedAPIResource struct { //general named resource
@@ -30,6 +43,7 @@ type PokeArea struct { //Location in map
 	Location          NamedAPIResource    `json:"results"`
 	PokemonEncounters []PokemonEncounters `json:"pokemon_encounters"`
 }
+
 type PokemonEncounters struct {
 	Pokemon NamedAPIResource `json:"pokemon"`
 }
@@ -54,6 +68,49 @@ type stat struct {
 type types struct {
 	Slot        int              `json:"slot"`
 	PokemonType NamedAPIResource `json:"type"`
+}
+
+func GetRegions() (PokeMapInfo, error) {
+	var pokeMapInfo PokeMapInfo
+	url := "https://pokeapi.co/api/v2/region/"
+	res, err := http.Get(url) //HTTP get to API
+	if err != nil {
+		return pokeMapInfo, fmt.Errorf("error creating request: %w", err)
+	}
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
+	if err = decoder.Decode(&pokeMapInfo); err != nil {
+		return PokeMapInfo{}, err
+	}
+	return pokeMapInfo, nil
+}
+
+func GetRegion(url string) (PokeRegion, error) {
+	var pokeRegion = PokeRegion{}
+	res, err := http.Get(url) //HTTP get to API
+	if err != nil {
+		return pokeRegion, fmt.Errorf("error creating request: %w", err)
+	}
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
+	if err = decoder.Decode(&pokeRegion); err != nil {
+		return PokeRegion{}, err
+	}
+	return pokeRegion, nil
+}
+
+func GetLocation(url string) (PokeLocation, error) {
+	var pokeLocation = PokeLocation{}
+	res, err := http.Get(url) //HTTP get to API
+	if err != nil {
+		return pokeLocation, fmt.Errorf("error creating request: %w", err)
+	}
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
+	if err = decoder.Decode(&pokeLocation); err != nil {
+		return PokeLocation{}, err
+	}
+	return pokeLocation, nil
 }
 
 func GetPokeMap(url string) (PokeMapInfo, error) {
@@ -121,8 +178,20 @@ func (p PokeMapInfo) List() error { //list locations in map
 		return fmt.Errorf("nothing to list")
 	}
 	for _, location := range p.Results {
-		fmt.Println(location.Name)
+		fmt.Printf(" - %v\n", location.Name)
 	}
+	return nil
+}
+
+func (p PokeLocation) List() error { //list locations in map
+	if len(p.Areas) == 0 {
+		return fmt.Errorf("nothing to list")
+	}
+	fmt.Printf("Areas in \"%v\" location:\n", p.Name)
+	for _, location := range p.Areas {
+		fmt.Printf(" - %v\n", location.Name)
+	}
+	fmt.Println("[Use \"explore [area]\" to enter a location]")
 	return nil
 }
 
@@ -133,6 +202,20 @@ func (p PokeArea) List() error { // list pokemon names in location
 	for _, pokemonEncounter := range p.PokemonEncounters {
 		fmt.Println(pokemonEncounter.Pokemon.Name)
 	}
+	return nil
+}
+
+func (p PokeRegion) List() error { // list pokemon names in location
+	if len(p.Locations) == 0 {
+		return fmt.Errorf("nothing to list")
+	}
+	fmt.Printf("Locations in \"%v\" region:\n", p.Name)
+
+	for _, location := range p.Locations {
+		fmt.Printf("- %v\n", location.Name)
+	}
+	fmt.Println("[Use \"travel [Region Name]\" to change regions]") //
+	fmt.Println("[Use \"map [location]\" to enter a location]")
 	return nil
 }
 
