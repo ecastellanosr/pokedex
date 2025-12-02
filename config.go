@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	pokeapi "github.com/ecastellanosr/pokedex/internal/pokeAPI"
+	pokebattle "github.com/ecastellanosr/pokedex/internal/pokeBattle"
 	"github.com/ecastellanosr/pokedex/internal/pokecache"
 )
 
@@ -18,8 +19,9 @@ type config struct {
 	arg           string
 	starters      [3]string
 	cache         *pokecache.Cache
-	pokedex       map[string]pokeapi.Pokemon
-	team          []pokeapi.Pokemon
+	pokedex       map[string]pokeapi.HPokemon
+	playerinfo    *pokebattle.PlayerInfo
+	areaPokemon   map[string]bool
 }
 
 func cacheShowList(cfg *config, url string, cacheType string) (bool, error) {
@@ -100,10 +102,13 @@ func cfgUpdate(cfg *config, pokeStruct pokeapi.List, url string) error { //updat
 	}
 }
 
-func pokedexUpdate(cfg *config, pokemon pokeapi.Pokemon) error { // add pokemon to pokedex
+func pokedexUpdate(cfg *config, pokemon pokeapi.HPokemon) error { // add pokemon to pokedex
 	cfg.pokedex[pokemon.Name] = pokemon
-	if len(cfg.team) != 6 {
-		cfg.team = append(cfg.team, pokemon)
-	}
 	return nil
+}
+
+func teamUpdate(cfg *config, pokemon *pokeapi.Pokemon) {
+	if len(cfg.playerinfo.Team) != 6 {
+		cfg.playerinfo.Team = append(cfg.playerinfo.Team, pokemon) // change hpokemon to pokemon
+	}
 }

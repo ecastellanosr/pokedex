@@ -5,6 +5,7 @@ import (
 	"os"
 
 	pokeapi "github.com/ecastellanosr/pokedex/internal/pokeAPI"
+	pokebattle "github.com/ecastellanosr/pokedex/internal/pokeBattle"
 )
 
 // CLI Pokedex command format
@@ -47,10 +48,10 @@ func getCommands() map[string]cliCommand {
 			description: "Explore an specific location; needs the name as an argument",
 			callback:    commandExplore,
 		},
-		"catch": {
-			name:        "catch",
-			description: "Catch a specific pokemon, needs the name as an argument",
-			callback:    commandCatch,
+		"battle": {
+			name:        "battle",
+			description: "battle a specific pokemon, needs the name as an argument",
+			callback:    commandBattle,
 		},
 		"inspect": {
 			name:        "inspect",
@@ -66,6 +67,21 @@ func getCommands() map[string]cliCommand {
 			name:        "start",
 			description: "Pick a starter pokemon",
 			callback:    commandStart,
+		},
+		"walk": {
+			name:        "walk",
+			description: "Walking in the area has a chance to see a pokemon",
+			callback:    commandWalk,
+		},
+		"team": {
+			name:        "team",
+			description: "See your team and their stats",
+			callback:    commandTeam,
+		},
+		"change": {
+			name:        "change",
+			description: "change pokemon in the team, accepts 2 arguments, first the pokemon in the team second the pokemon to change into form the pokedex",
+			callback:    commandChange,
 		},
 	}
 }
@@ -95,14 +111,19 @@ func commandStart(cfg *config) error { //catch pokemon after going to an area
 	for _, pokemonName := range cfg.starters {
 		if pokemonName == cfg.arg {
 			cfg.hasStarter = true
-			pokemon, err := pokeapi.GetPokemon(pokemonURL)
+			HPokemon, err := pokeapi.GetPokemon(pokemonURL)
 			if err != nil {
 				return fmt.Errorf("Error while getting pokemon: %v", err)
 			}
-			err = pokedexUpdate(cfg, pokemon)
+			err = pokedexUpdate(cfg, HPokemon)
 			if err != nil {
 				return fmt.Errorf("Error while updating pokedex: %v", err)
 			}
+			pokemon, err := pokeapi.ChangePokemon(HPokemon) //change pokemon to have level EV, IV and other calculated stats
+			if err != nil {
+				return fmt.Errorf("Error while changing starter pokemon: %v", err)
+			}
+			teamUpdate(cfg, &pokemon)
 			fmt.Printf("%v has been selected\n", pokemon.Name)
 			fmt.Println()
 			return nil
@@ -231,47 +252,71 @@ func commandMapB(cfg *config) error { //same as commandMap
 // explore a especific location
 func commandExplore(cfg *config) error {
 	place := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%v/", cfg.arg) //place URL
-	ok, err := cacheShowList(cfg, place, "explore")                              //Check cache
-	if err != nil {
-		return fmt.Errorf("Error while cacheShowList: %v", err)
-	}
-	if ok {
-		return nil
-	}
-	pokeArea, err := pokeapi.GetPokemons(place) //Get pokemons in the area
+
+	pokeArea, err := pokeapi.GetArea(place) //Get pokemons in the area
 	if err != nil {
 		return fmt.Errorf("Error while GetPokeMap: %v", err)
 	}
 	if err = cfgUpdate(cfg, pokeArea, place); err != nil { //update cfg for cache
 		return fmt.Errorf("Error while cfgUpdate: %v", err)
 	}
+	areaPokemon := map[string]bool{}                     //pokemon in the area
+	list := []string{}                                   //list for randon encounter selection
+	for _, pokemon := range pokeArea.PokemonEncounters { //add pokemons in the list and pokemon area
+		areaPokemon[pokemon.HPokemon.Name] = true
+		list = append(list, pokemon.HPokemon.Name)
+	}
+	cfg.areaPokemon = areaPokemon
+	areaRandomPokemon := pokeapi.RandomEncounter(list) //random encounter pokemon name
+	err = battleHelper(cfg, areaRandomPokemon)         //battle that pokemon
+	if err != nil {
+		return fmt.Errorf("Error while battle taked place: %v", err) //
+	}
 
-	if err = pokeArea.List(); err != nil { //list pokemons in area
-		return fmt.Errorf("Error while Listing Area: %v", err)
+	return nil
+}
+
+func commandWalk(cfg *config) error {
+	if len(cfg.areaPokemon) == 0 {
+		fmt.Println("explore an area first!")
+		return nil
+	}
+	encounteredPokemon := pokeapi.RandomPokemon(cfg.areaPokemon)
+	if encounteredPokemon == "" {
+		fmt.Printf("No pokemon here, walk some more!\n")
+		return nil
+	} else {
+		fmt.Printf("there is a %v in the bush!\nDo you want to fight it?\n", encounteredPokemon)
+		return nil
+	}
+}
+
+func commandBattle(cfg *config) error { //change for battle
+	_, ok := cfg.areaPokemon[cfg.arg]
+	if ok {
+		battleHelper(cfg, cfg.arg)
+	} else {
+		fmt.Printf("%v is not a pokemon in the area", cfg.arg)
 	}
 	return nil
 }
 
-func commandCatch(cfg *config) error { //catch pokemon after going to an area
-	cachePokemon, ok := cfg.pokedex[cfg.arg]
-	if ok {
-		cfg.arg = ""
-		pokeapi.CatchPokemon(cachePokemon)
-		return nil
-	}
-	pokemonURL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%v/", cfg.arg)
-	pokemon, err := pokeapi.GetPokemon(pokemonURL)
+func battleHelper(cfg *config, rivalpokemon string) error {
+	pokemonURL := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%v/", rivalpokemon)
+	HPokemon, err := pokeapi.GetPokemon(pokemonURL)
 	if err != nil {
 		return fmt.Errorf("Error while getting pokemon: %v", err)
 	}
-	catched := pokeapi.CatchPokemon(pokemon)
-	if catched == false {
+	pokemon, err := pokeapi.ChangePokemon(HPokemon) // pokemon with actual stats, level, XP, points etc.
+	captured := pokebattle.PokeBattle(cfg.playerinfo, &pokemon)
+	if !captured {
 		return nil
 	}
-	err = pokedexUpdate(cfg, pokemon)
+	err = pokedexUpdate(cfg, HPokemon)
 	if err != nil {
 		return fmt.Errorf("Error while updating pokedex: %v", err)
 	}
+	teamUpdate(cfg, &pokemon)
 	return nil
 }
 
@@ -297,6 +342,40 @@ func commandPokedex(cfg *config) error { //list pokemons in pokedex
 	fmt.Println("Your pokedex:")
 	for _, pokemon := range cfg.pokedex {
 		fmt.Printf(" - %v\n", pokemon.Name)
+	}
+	return nil
+}
+
+func commandTeam(cfg *config) error { //list pokemons in pokedex
+	fmt.Println("Your Team:")
+	for _, pokemon := range cfg.playerinfo.Team {
+		pokemon.List()
+		fmt.Println("-----------------------------------------------------")
+	}
+	return nil
+}
+
+func commandChange(cfg *config) error { //list pokemons in pokedex
+	pokemons := separateDashedString(cfg.arg)
+	pokedexPokemon, ok := cfg.pokedex[pokemons[1]]
+	if !ok {
+		fmt.Printf("%v is not in the pokedex and can't be added to the team.\n", pokemons[1])
+		return nil
+	}
+	pokemonInTeam := false
+	for i, teamPokemon := range cfg.playerinfo.Team {
+		if teamPokemon.Name == pokemons[0] {
+			pokemonInTeam = true
+			pokemon, err := pokeapi.ChangePokemon(pokedexPokemon)
+			if err != nil {
+				return err
+			}
+			cfg.playerinfo.Team[i] = &pokemon
+		}
+	}
+	if !pokemonInTeam {
+		fmt.Printf("%v is not in the team\n", pokemons[1])
+		return nil
 	}
 	return nil
 }

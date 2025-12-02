@@ -3,7 +3,6 @@ package pokeapi
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"math/rand/v2"
 	"net/http"
 )
@@ -45,10 +44,10 @@ type PokeArea struct { //Location in map
 }
 
 type PokemonEncounters struct {
-	Pokemon NamedAPIResource `json:"pokemon"`
+	HPokemon NamedAPIResource `json:"pokemon"`
 }
 
-type Pokemon struct {
+type HPokemon struct {
 	Name           string  `json:"name"`
 	Url            string  `json:"url"`
 	BaseExperience int     `json:"base_experience"`
@@ -57,6 +56,7 @@ type Pokemon struct {
 	Order          int     `json:"order"`
 	Stats          []stat  `json:"stats"`
 	Types          []types `json:"types"`
+	Move           []Move  `json:"moves"`
 }
 
 type stat struct {
@@ -68,6 +68,35 @@ type stat struct {
 type types struct {
 	Slot        int              `json:"slot"`
 	PokemonType NamedAPIResource `json:"type"`
+}
+
+type Move struct {
+	Move    NamedAPIResource `json:"move"`
+	Details []MoveDetails    `json:"version_group_details"`
+}
+
+type MoveDetails struct {
+	MoveLearnedMethod NamedAPIResource `json:"move_learn_method"`
+	VersionGroup      NamedAPIResource `json:"version_group"`
+	AtLevel           int              `json:"level_learned_at"`
+	Order             int              `json:"order"` //Order by which the pokemon will learn the move. A newly learnt move will replace the move with lowest order.
+}
+
+type GrowthRate struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+type Nature struct {
+	ID             int              `json:"id"`
+	Name           string           `json:"name"`
+	Decreased_stat NamedAPIResource `json:"decreased_stat"`
+	Increased_stat NamedAPIResource `json:"increased_stat"`
+}
+
+type Species struct {
+	Name        string `json:"name"`
+	CaptureRate int    `json:"capture_rate"`
 }
 
 func GetRegions() (PokeMapInfo, error) {
@@ -130,7 +159,7 @@ func GetPokeMap(url string) (PokeMapInfo, error) {
 	return pokeMap, nil
 }
 
-func GetPokemons(url string) (PokeArea, error) {
+func GetArea(url string) (PokeArea, error) {
 	var pokeArea = PokeArea{}
 	res, err := http.Get(url) // no default url
 	if err != nil {
@@ -144,8 +173,8 @@ func GetPokemons(url string) (PokeArea, error) {
 	return pokeArea, nil
 }
 
-func GetPokemon(url string) (Pokemon, error) { //get pokemon struct
-	var pokemon = Pokemon{}
+func GetPokemon(url string) (HPokemon, error) { //get pokemon struct
+	var pokemon = HPokemon{}
 	res, err := http.Get(url) // no default url
 	if err != nil {
 		return pokemon, fmt.Errorf("error creating request: %w", err)
@@ -153,24 +182,56 @@ func GetPokemon(url string) (Pokemon, error) { //get pokemon struct
 	defer res.Body.Close()
 	decoder := json.NewDecoder(res.Body)
 	if err = decoder.Decode(&pokemon); err != nil {
-		return Pokemon{}, err
+		return HPokemon{}, err
 	}
 	return pokemon, nil
 }
 
-func CatchPokemon(pokemon Pokemon) bool { //function to determine if pokemon gets catched
-	fmt.Printf("Throwing a Pokeball at %v...\n", pokemon.Name)
-	//chance is the percentage 0-100 of catching it, the function is based
-	//in the base experience and is a sigmoid equation with 98% for 0 and 5% inf
-	chance := 100.0 - (95.0 / (1.0 + math.Exp(-0.03*(float64(pokemon.BaseExperience)-130.0))))
-	random := rand.IntN(101) // a random number [0,100]
-	fmt.Printf("chance: %v,random: %v\n", chance, random)
-	if random > int(math.Round(chance)) { //if random number is less than chance then it escapes
-		fmt.Printf("%v escaped!\n", pokemon.Name)
-		return false
+func GetSpecies(pokemon string) (Species, error) { //get pokemon struct
+	var species = Species{}
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon-species/%v/", pokemon)
+	res, err := http.Get(url) // no default url
+	if err != nil {
+		return species, fmt.Errorf("error creating request: %w", err)
 	}
-	fmt.Printf("%v was caught!\n", pokemon.Name)
-	return true
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
+	if err = decoder.Decode(&pokemon); err != nil {
+		return Species{}, err
+	}
+	return species, nil
+}
+
+func GetNature() (Nature, error) {
+	random := (rand.IntN(25) + 1)
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/nature/%v/", random)
+	var nature = Nature{}
+	res, err := http.Get(url) // no default url
+	if err != nil {
+		return nature, fmt.Errorf("error creating request: %w", err)
+	}
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
+	if err = decoder.Decode(&nature); err != nil {
+		return Nature{}, fmt.Errorf("error with nature: %v", err)
+	}
+	return nature, nil
+}
+
+func GetGrowthRate() (GrowthRate, error) {
+	random := (rand.IntN(4) + 1)
+	url := fmt.Sprintf("https://pokeapi.co/api/v2/growth-rate/%v/", random)
+	var growthRate = GrowthRate{}
+	res, err := http.Get(url) // no default url
+	if err != nil {
+		return growthRate, fmt.Errorf("error creating request: %w", err)
+	}
+	defer res.Body.Close()
+	decoder := json.NewDecoder(res.Body)
+	if err = decoder.Decode(&growthRate); err != nil {
+		return GrowthRate{}, err
+	}
+	return growthRate, nil
 }
 
 func (p PokeMapInfo) List() error { //list locations in map
@@ -200,7 +261,7 @@ func (p PokeArea) List() error { // list pokemon names in location
 		return fmt.Errorf("nothing to list")
 	}
 	for _, pokemonEncounter := range p.PokemonEncounters {
-		fmt.Println(pokemonEncounter.Pokemon.Name)
+		fmt.Println(pokemonEncounter.HPokemon.Name)
 	}
 	return nil
 }
@@ -219,7 +280,7 @@ func (p PokeRegion) List() error { // list pokemon names in location
 	return nil
 }
 
-func (p Pokemon) List() error { // list pokemon info
+func (p HPokemon) List() error { // list pokemon info
 	if len(p.Stats) == 0 {
 		return fmt.Errorf("nothing to list")
 	}

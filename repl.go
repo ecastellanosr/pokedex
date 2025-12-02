@@ -8,6 +8,7 @@ import (
 	"time"
 
 	pokeapi "github.com/ecastellanosr/pokedex/internal/pokeAPI"
+	pokebattle "github.com/ecastellanosr/pokedex/internal/pokeBattle"
 	"github.com/ecastellanosr/pokedex/internal/pokecache"
 )
 
@@ -15,6 +16,10 @@ func cleanInput(text string) []string { //separate words and clean unnecesary sp
 	output := strings.ToLower(text)
 	stringList := strings.Fields(output)
 	return stringList
+}
+
+func separateDashedString(text string) []string {
+	return strings.Split(text, "-")
 }
 
 func startRepl() {
@@ -27,7 +32,7 @@ func startRepl() {
 		next:     "https://pokeapi.co/api/v2/location-area/?offset=0&limit=20",
 		previous: "",
 		cache:    pokecache.NewCache(interval),
-		pokedex:  map[string]pokeapi.Pokemon{},
+		pokedex:  map[string]pokeapi.HPokemon{},
 		starters: [3]string{
 			"bulbasaur",
 			"squirtle",
@@ -35,12 +40,13 @@ func startRepl() {
 		},
 		hasStarter:    false,
 		currentRegion: "kanto",
-		team:          []pokeapi.Pokemon{},
+		playerinfo:    pokebattle.NewPlayer(),
+		areaPokemon:   map[string]bool{},
 	} //configuration with map, cache and pokedex
 	fmt.Println("Choose one pokemon between these starter pokemon")
 	fmt.Println(cfg.starters)
 	for {
-		fmt.Print("Pokedex >")
+		fmt.Print("PokedexCLI >")
 		if !scanner.Scan() {
 			continue
 		}
@@ -52,6 +58,8 @@ func startRepl() {
 		firstLine := input[0]     //command
 		if len(input) == 2 {
 			cfg.arg = input[1]
+		} else if len(input) == 3 {
+			cfg.arg = fmt.Sprintf("%v-%v", input[1], input[2])
 		} else {
 			cfg.arg = ""
 		}
